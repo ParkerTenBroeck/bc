@@ -205,10 +205,13 @@ impl<'a> Tokenizer<'a> {
             str_builder: SSBuilder::None,
         }
     }
+}
 
-    pub fn next(&mut self) -> Option<TokenizerResult<'a>> {
+impl<'a> Iterator for  Tokenizer<'a>{
+    type Item = TokenizerResult<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         let mut char_lit = '\0';
-        // let mut str = 
         loop {
             let c = self.chars.peek().copied();
             let mut consume = true;
@@ -475,10 +478,10 @@ char 'c' literal
 "
     "' "#;
 
-    let mut tokenizer = Tokenizer::new(data);
+    let tokenizer = Tokenizer::new(data);
 
-    while let Some(next) = tokenizer.next(){
-        match next{
+    for token in tokenizer{
+        match token{
             Ok(ok) => {
                 let repr = &data[ok.meta.offset as usize..(ok.meta.offset+ok.meta.len) as usize];
                 println!("{:?} => {:?}", repr, ok)
