@@ -7,10 +7,17 @@ name = "bc"
 version = "0.1.0"
 dependencies = [
  "byteyarn",
+ "str-buf",
 ]
 
 [[package]]
 name = "byteyarn"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7534301c0ea17abb4db06d75efc7b4b0fa360fce8e175a4330d721c71c942ff"
+checksum = "a0542f67b39e2bfcec9f625cf3dcf9e621acb76e700352ab7f21e85036d5afc6"
+
+[[package]]
+name = "str-buf"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e75b72ee54e2f93c3ea1354066162be893ee5e25773ab743de3e088cecbb4f31"

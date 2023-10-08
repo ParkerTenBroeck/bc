@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::Chars};
+use std::{iter::Peekable, str::Chars, fmt::Write};
 
 use byteyarn::YarnBox;
 
@@ -174,21 +174,41 @@ pub struct Tokenizer<'a> {
 
     start: Position,
     current: Position,
+
+    str_builder: SSBuilder<'a>
+}
+
+pub enum SSBuilder<'a>{
+    None,
+    Ref(&'a str),
+    Small(str_buf::StrBuf<15>),
+    Alloc(String)
+}
+
+impl<'a> SSBuilder<'a> {
+    fn take(&mut self) -> SSBuilder<'a> {
+        let mut tmp = SSBuilder::None;
+        std::mem::swap(self, &mut tmp);
+        tmp
+    }
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(str: &'a str) -> Self {
+        // byteyarn::Yarn::from;
         Self {
             str,
             chars: str.chars().peekable(),
             state: State::Default,
             start: Position::default(),
             current: Position::default(),
+            str_builder: SSBuilder::None,
         }
     }
 
     pub fn next(&mut self) -> Option<TokenizerResult<'a>> {
         let mut char_lit = '\0';
+        // let mut str = 
         loop {
             let c = self.chars.peek().copied();
             let mut consume = true;
@@ -211,9 +231,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 tmp
             } else {
-                let mut tmp = self.current;
-                tmp.offset += 1;
-                tmp
+                self.current
             };
 
             macro_rules! eof_none {
@@ -342,13 +360,6 @@ impl<'a> Tokenizer<'a> {
                     Some(c) if c.is_alphanumeric() => {}
                     _ =>  unconsume_ret!(self, Ok(Token::Ident(&self.str[self.start.offset..self.current.offset]))),
                 },
-                State::String => match c{
-                    Some('"') => {
-
-                    },
-                    Some(c) => char_lit = c,
-                    None => ret = Some(Err(TokenizerError::UnclosedCharLiteral)),
-                },
                 State::CharLiteral => match c{
                     Some('\'') => ret = Some(Err(TokenizerError::EmptyCharLiteral)),
                     Some('\n') => ret = Some(Err(TokenizerError::UnclosedCharLiteral)),
@@ -368,6 +379,41 @@ impl<'a> Tokenizer<'a> {
                     None | Some('\n') => ret = Some(Err(TokenizerError::UnclosedCharLiteral)),
                     _ => {}
                 }
+
+                State::String => match c{
+                    Some('"') => {
+                        let yarn = match self.str_builder.take(){
+                            SSBuilder::None => byteyarn::YarnBox::new(""),
+                            SSBuilder::Ref(str) => byteyarn::YarnBox::from(str),
+                            SSBuilder::Small(small_buf) => byteyarn::YarnBox::new(small_buf.as_str()).immortalize(),
+                            SSBuilder::Alloc(string) => byteyarn::Yarn::from_string(string),
+                        };
+                        ret = Some(Ok(Token::StringLiteral(yarn)))
+                    },
+                    Some('\\') => {
+                        todo!()
+                    }
+                    Some(c) => match self.str_builder.take(){
+                        SSBuilder::None => {
+                            self.str_builder = SSBuilder::Ref(&self.str[self.start.offset+'"'.len_utf8()..processing.offset])
+                        },
+                        SSBuilder::Ref(_) => self.str_builder = SSBuilder::Ref(&self.str[self.start.offset+'"'.len_utf8()..processing.offset]),
+                        SSBuilder::Small(mut small) => {
+                            if small.write_char(c).is_ok(){
+                                self.str_builder = SSBuilder::Small(small);
+                            }else{
+                                let mut string = small.to_string();
+                                string.push(c);
+                                self.str_builder = SSBuilder::Alloc(string);
+                            }
+                        },
+                        SSBuilder::Alloc(mut string) => {
+                            string.push(c);
+                            self.str_builder = SSBuilder::Alloc(string);
+                        },
+                    },
+                    None => ret = Some(Err(TokenizerError::UnclosedCharLiteral)),
+                },
                 State::Eof => return None,
             }
 
@@ -400,7 +446,7 @@ impl<'a> Tokenizer<'a> {
 
 #[test]
 fn test(){
-    let data = "
+    let data = r#"
 hello :) () [] {} : / 
 > >> >= >>=
 < << >= <<=
@@ -422,7 +468,12 @@ char 'c' literal
     '
     '
 '
-    ";
+"this is a string :)"
+""
+
+"
+"
+    "' "#;
 
     let mut tokenizer = Tokenizer::new(data);
 

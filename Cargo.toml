@@ -6,4 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-byteyarn = "0.2.2"
+byteyarn = "0.3.0"
+str-buf = "*"
