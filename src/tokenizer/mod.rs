@@ -15,7 +15,7 @@ pub(super) struct Position {
     col: usize,
 }
 
-type TokenizerResult<'a> = Result<TokenFull<'a>, Box<TokenizerErrorFull<'a>>>;
+type TokenizerResult<'a> = Result<Span<Token<'a>>, Box<Span<TokenizerError<'a>>>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EscapeReturn {
@@ -85,7 +85,7 @@ pub struct Tokenizer<'a> {
     escape_start: Position,
 
     numeric_start: usize,
-    suffix_start: usize,
+    _suffix_start: usize,
 
     str_builder: SSBuilder<'a>,
 
@@ -107,6 +107,20 @@ impl<'a> SSBuilder<'a> {
     }
 }
 
+fn ident(ident: &str) -> Token{
+    match ident{
+        "true" => Token::TrueLiteral,
+        "false" => Token::FalseLiteral,
+        "let" => Token::Let,
+        "for" => Token::For,
+        "fn" => Token::Fn,
+        "while" => Token::While,
+        "loop" => Token::Loop,
+        "if" => Token::If,
+        o => Token::Ident(o)
+    }
+}
+
 impl<'a> Tokenizer<'a> {
     pub fn new(str: &'a str) -> Self {
         Self {
@@ -119,7 +133,7 @@ impl<'a> Tokenizer<'a> {
             str_builder: SSBuilder::None,
             include_comments: false,
             numeric_start: 0,
-            suffix_start: 0,
+            _suffix_start: 0,
         }
     }
 
@@ -304,6 +318,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     ';' => ret = Some(Ok(Token::Semicolon)),
                     ':' => ret = Some(Ok(Token::Colon)),
                     '@' => ret = Some(Ok(Token::At)),
+                    '$' => ret = Some(Ok(Token::Ampersand)),
                     '#' => ret = Some(Ok(Token::Octothorp)),
 
                     '0' => {
@@ -325,6 +340,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     _ => unconsume_ret!(self, Ok(Token::Plus)),
                 },
                 State::Minus => match c {
+                    Some('>') => ret = Some(Ok(Token::SmallRightArrow)),
                     Some('=') => ret = Some(Ok(Token::MinusEq)),
                     _ => unconsume_ret!(self, Ok(Token::Minus)),
                 },
@@ -343,6 +359,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     _ => unconsume_ret!(self, Ok(Token::Modulo)),
                 },
                 State::Equal => match c {
+                    Some('>') => ret = Some(Ok(Token::BigRightArrow)),
                     Some('=') => ret = Some(Ok(Token::Assignment)),
                     _ => unconsume_ret!(self, Ok(Token::Equals)),
                 },
@@ -394,9 +411,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some(c) if c.is_alphanumeric() || c == '_' => {}
                     _ => unconsume_ret!(
                         self,
-                        Ok(Token::Ident(
-                            &self.str[self.start.offset..self.current.offset]
-                        ))
+                        Ok(ident(&self.str[self.start.offset..self.current.offset]))
                     ),
                 },
                 State::CharLiteral => match c {
@@ -734,7 +749,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                             ret = None;
                             continue;
                         }
-                        return Some(Ok(TokenFull::new(token, meta)));
+                        return Some(Ok(Span::new(token, meta)));
                     }
                     Err(err) => {
                         let meta =
@@ -743,7 +758,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                             self.start = self.current;
                         }
                         self.state = err_ret_state;
-                        return Some(Err(Box::new(TokenizerErrorFull::new(err, meta))));
+                        return Some(Err(Box::new(Span::new(err, meta))));
                     }
                 }
             }
@@ -760,6 +775,7 @@ hello :) () [] {} : /
 + +=
 - -= 
 * *=
+% %=
 / /=
 & && &= 
 | || |=
@@ -769,6 +785,8 @@ hello :) () [] {} : /
 :
 ;
 . .. ..= 
+-> =>
+# $ @
 wow... that was aLot
 char 'c' literal 'w' 'o' 'w'
 "this is a string :)"
@@ -776,6 +794,11 @@ empty -> ""
 
 '\n' '\0' '\t' '\'' '\"'
 "\n \0 \t \' \" \r"
+
+"\
+    multi\
+   line\
+   "
 
 /* milti line 
 // comment !?!
@@ -802,12 +825,6 @@ empty -> ""
 0_0_0_1_2
 0b_1_0_1
 12_45_._43_e_-_1
-
-"\
-    multi\
-   line\
-   "
-
 "#;
 
     let tokenizer = Tokenizer::new(data).include_comments();
@@ -815,12 +832,12 @@ empty -> ""
     for token in tokenizer {
         match token {
             Ok(ok) => {
-                let repr = &data[ok.meta.offset as usize..(ok.meta.offset + ok.meta.len) as usize];
+                let repr = &data[ok.span.offset as usize..(ok.span.offset + ok.span.len) as usize];
                 println!("{:?} => {:?}", repr, ok)
             }
             Err(err) => {
                 let repr =
-                    &data[err.meta.offset as usize..(err.meta.offset + err.meta.len) as usize];
+                    &data[err.span.offset as usize..(err.span.offset + err.span.len) as usize];
                 println!("Error {:?}: {:?}", repr, err)
             }
         }
@@ -842,12 +859,12 @@ fn test_errors() {
             match token {
                 Ok(ok) => {
                     let repr =
-                        &data[ok.meta.offset as usize..(ok.meta.offset + ok.meta.len) as usize];
+                        &data[ok.span.offset as usize..(ok.span.offset + ok.span.len) as usize];
                     println!("{:?} => {:?}", repr, ok)
                 }
                 Err(err) => {
                     let repr =
-                        &data[err.meta.offset as usize..(err.meta.offset + err.meta.len) as usize];
+                        &data[err.span.offset as usize..(err.span.offset + err.span.len) as usize];
                     println!("Error {:?}: {:?}", repr, err)
                 }
             }

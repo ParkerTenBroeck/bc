@@ -52,6 +52,8 @@ pub enum Token<'a> {
     PlusEq,
     RangeInclusive,
     RangeExclusive,
+    SmallRightArrow,
+    BigRightArrow,
     OrEq,
     AndEq,
     XorEq,
@@ -64,7 +66,8 @@ pub enum Token<'a> {
     Else,
     While,
     Loop,
-    Let,
+    Let,    
+    For,
 
     Ident(&'a str),
 
@@ -72,31 +75,24 @@ pub enum Token<'a> {
     NumericLiteral(Number<'a>),
     CharLiteral(char),
 
+    FalseLiteral,
+    TrueLiteral,
+
     SingleLineComment(&'a str),
     MultiLineComment(&'a str),
-}
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct TokenFull<'a> {
-    pub token: Token<'a>,
-    pub meta: TokenMeta,
-}
-
-impl<'a> TokenFull<'a> {
-    pub fn new(token: Token<'a>, meta: TokenMeta) -> Self {
-        Self { token, meta }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TokenizerErrorFull<'a> {
-    pub error: TokenizerError<'a>,
-    pub meta: TokenMeta,
+pub struct Span<T>{
+    pub span: TokenMeta,
+    pub val: T,
 }
 
-impl<'a> TokenizerErrorFull<'a> {
-    pub fn new(error: TokenizerError<'a>, meta: TokenMeta) -> Self {
-        Self { error, meta }
+
+impl<T> Span<T> {
+    pub fn new(val: T, span: TokenMeta) -> Self {
+        Self { val, span }
     }
 }
 
