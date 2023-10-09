@@ -2,7 +2,7 @@ use byteyarn::YarnBox;
 
 use super::*;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token<'a> {
     LPar,
     RPar,
@@ -68,7 +68,6 @@ pub enum Token<'a> {
 
     Ident(&'a str),
 
-
     StringLiteral(YarnBox<'a, str>),
     NumericLiteral(Number),
     CharLiteral(char),
@@ -77,7 +76,7 @@ pub enum Token<'a> {
     MultiLineComment(&'a str),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TokenFull<'a> {
     pub token: Token<'a>,
     pub meta: TokenMeta,

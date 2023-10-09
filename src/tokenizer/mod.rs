@@ -61,6 +61,15 @@ enum State {
     EscapeStart(EscapeReturn),
 
     Eof,
+
+    NumericStartZero,
+    NumericStart,
+    NumericDecimal,
+    NumericDecimalNumber,
+    NumericDecimalNumberE,
+    NumericDecimalNumberENumber,
+    NumericBin,
+    NumericHex,
 }
 
 pub struct Tokenizer<'a> {
@@ -72,7 +81,13 @@ pub struct Tokenizer<'a> {
     current: Position,
     escape_start: Position,
 
+    numeric_start: usize,
+    suffix_start: usize,
+    numeric_width_start: usize,
+
     str_builder: SSBuilder<'a>,
+
+    num_tmp: str_buf::StrBuf<129>,
 
     include_comments: bool,
 }
@@ -103,6 +118,10 @@ impl<'a> Tokenizer<'a> {
             escape_start: Position::default(),
             str_builder: SSBuilder::None,
             include_comments: false,
+            numeric_start: 0,
+            suffix_start: 0,
+            numeric_width_start: 0,
+            num_tmp: str_buf::StrBuf::new(),
         }
     }
 
@@ -238,7 +257,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             } else {
                 self.current
             };
-
+            
             macro_rules! eof_none {
                 ($expr:expr) => {
                     if let Some(char) = $expr {
@@ -284,10 +303,26 @@ impl<'a> Iterator for Tokenizer<'a> {
                     '~' => ret = Some(Ok(Token::BitwiseNot)),
                     ',' => ret = Some(Ok(Token::Comma)),
                     '?' => ret = Some(Ok(Token::QuestionMark)),
+                    ';' => ret = Some(Ok(Token::Semicolon)),
                     ':' => ret = Some(Ok(Token::Colon)),
+                    '@' => ret = Some(Ok(Token::At)),
+                    '#' => ret = Some(Ok(Token::Octothorp)),
+
+                    '0' => {
+                        self.num_tmp.clear();
+                        self.numeric_start = self.current.offset;
+                        self.state = State::NumericStartZero;
+                    }
+                    c @ '1'..='9' => {
+                        self.num_tmp.clear();
+                        // never fails 
+                        _ = self.num_tmp.write_char(c);
+                        self.numeric_start = self.current.offset;
+                        self.state = State::NumericStart;
+                    }
 
                     c if c.is_whitespace() => self.start = processing,
-                    c if c.is_alphabetic() => self.state = State::Ident,
+                    c if c.is_alphabetic() || c == '_' => self.state = State::Ident,
 
                     c => ret = Some(Err(TokenizerError::InvalidChar(c))),
                 },
@@ -362,7 +397,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     _ => unconsume_ret!(self, Ok(Token::RangeExclusive)),
                 },
                 State::Ident => match c {
-                    Some(c) if c.is_alphanumeric() => {}
+                    Some(c) if c.is_alphanumeric() || c == '_' => {}
                     _ => unconsume_ret!(
                         self,
                         Ok(Token::Ident(
@@ -376,7 +411,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some('\\') => {
                         self.escape_start = self.current;
                         self.state = State::EscapeStart(EscapeReturn::Char);
-                    },
+                    }
                     Some(c) => {
                         self.state = State::CharLiteralEnd;
                         char_lit = c;
@@ -406,10 +441,10 @@ impl<'a> Iterator for Tokenizer<'a> {
                         };
                         ret = Some(Ok(Token::StringLiteral(yarn)))
                     }
-                    Some('\\') => { 
+                    Some('\\') => {
                         self.escape_start = self.current;
                         self.state = State::EscapeStart(EscapeReturn::String);
-                    },
+                    }
                     Some(c) => match self.str_builder.take() {
                         SSBuilder::None => {
                             self.str_builder = SSBuilder::Ref(
@@ -437,26 +472,24 @@ impl<'a> Iterator for Tokenizer<'a> {
                     },
                     None => ret = Some(Err(TokenizerError::UnclosedStringLiteral)),
                 },
-                State::EscapeStart(ret_state) => {
-                    match c {
-                        Some('0') => self.escape_char_finish('\0', ret_state, &mut char_lit),
-                        Some('n') => self.escape_char_finish('\n', ret_state, &mut char_lit),
-                        Some('r') => self.escape_char_finish('\r', ret_state, &mut char_lit),
-                        Some('t') => self.escape_char_finish('\t', ret_state, &mut char_lit),
-                        Some('\\') => self.escape_char_finish('\\', ret_state, &mut char_lit),
-                        Some('\'') => self.escape_char_finish('\'', ret_state, &mut char_lit),
-                        Some('"') => self.escape_char_finish('"', ret_state, &mut char_lit),
-                        Some(_) => {
-                            (ret, error_meta, err_ret_state) =
-                                self.invalid_escape_sequence(ret_state, &processing)
-                        }
-
-                        None => {
-                            (ret, error_meta, err_ret_state) =
-                                self.unfinished_escape_sequence(ret_state, &processing)
-                        }
+                State::EscapeStart(ret_state) => match c {
+                    Some('0') => self.escape_char_finish('\0', ret_state, &mut char_lit),
+                    Some('n') => self.escape_char_finish('\n', ret_state, &mut char_lit),
+                    Some('r') => self.escape_char_finish('\r', ret_state, &mut char_lit),
+                    Some('t') => self.escape_char_finish('\t', ret_state, &mut char_lit),
+                    Some('\\') => self.escape_char_finish('\\', ret_state, &mut char_lit),
+                    Some('\'') => self.escape_char_finish('\'', ret_state, &mut char_lit),
+                    Some('"') => self.escape_char_finish('"', ret_state, &mut char_lit),
+                    Some(_) => {
+                        (ret, error_meta, err_ret_state) =
+                            self.invalid_escape_sequence(ret_state, &processing)
                     }
-                }
+
+                    None => {
+                        (ret, error_meta, err_ret_state) =
+                            self.unfinished_escape_sequence(ret_state, &processing)
+                    }
+                },
                 State::SingleLine => match c {
                     Some('\n') => {
                         ret = Some(Ok(Token::SingleLineComment(
@@ -492,6 +525,85 @@ impl<'a> Iterator for Tokenizer<'a> {
                     (_, None) => ret = Some(Err(TokenizerError::UnclosedMultiLineComment)),
                     _ => {}
                 },
+
+                State::NumericStart => match c {
+                    Some(c @ '0'..='9') => 
+                        _ = self.num_tmp.write_char(c),
+                    Some(c @ '.') => {
+                        self.state = State::NumericDecimal;
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some(c @ 'e') => {
+                        self.state = State::NumericDecimalNumberE;
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some('_') => {}
+                    _ => {
+                        consume = false;
+                        ret = Some(Ok(Token::NumericLiteral(Number::Unknown(
+                            self.num_tmp.parse::<u128>().unwrap(),
+                        ))))
+                    }
+                },
+                State::NumericStartZero => match c {
+                    Some('b') => {
+                        self.numeric_start = processing.offset;
+                        self.state = State::NumericBin;
+                    }
+                    Some('x') => {
+                        self.numeric_start = processing.offset;
+                        self.state = State::NumericHex;
+                    }
+                    Some(c @ '0'..='9') => {
+                        self.state = State::NumericStart;
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some(c @ '.') => {
+                        self.state = State::NumericDecimal;
+                        _ = self.num_tmp.write_char('0');
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some('_') => {}
+                    _ => {
+                        consume = false;
+                        ret = Some(Ok(Token::NumericLiteral(Number::Unknown(0))))
+                    }
+                },
+                State::NumericDecimal => match c {
+                    Some(c @ '0'..='9') => 
+                        _ = self.num_tmp.write_char(c),
+                    Some(c @ 'e') => {
+                        self.state = State::NumericDecimalNumberE;
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some('_') => {}
+                    _ => {
+                        consume = false;
+                        ret = Some(Ok(Token::NumericLiteral(Number::UnknownFloat(
+                            self.num_tmp.parse::<f64>().unwrap(),
+                        ))))
+                    }
+                },
+                State::NumericDecimalNumber => match c {
+                    Some(c @ '0'..='9') => 
+                        _ = self.num_tmp.write_char(c),
+                    Some(c @ 'e') => {
+                        self.state = State::NumericDecimalNumberE;
+                        _ = self.num_tmp.write_char(c);
+                    }
+                    Some('_') => {}
+                    _ => {
+                        consume = false;
+                        ret = Some(Ok(Token::NumericLiteral(Number::UnknownFloat(
+                            self.num_tmp.parse::<f64>().unwrap(),
+                        ))))
+                    }
+                },
+                State::NumericDecimalNumberE => todo!(),
+                State::NumericDecimalNumberENumber => todo!(),
+                State::NumericBin => {}
+                State::NumericHex => {}
+
                 State::Eof => return None,
             }
 
@@ -563,12 +675,17 @@ empty -> ""
 */
 /**/
 // comment () !!! :)
-//comment "#;
+//comment 
+
+0 1 2 3 4 5 6 7 8 9 10 55 340282366920938463463374607431768211455
+0x55 0xFF 0x1234567890abcdefABCDEF
+"#;
 
     let tokenizer = Tokenizer::new(data).include_comments();
     
     for token in tokenizer {
         match token {
+            
             Ok(ok) => {
                 let repr = &data[ok.meta.offset as usize..(ok.meta.offset + ok.meta.len) as usize];
                 println!("{:?} => {:?}", repr, ok)
@@ -586,8 +703,7 @@ empty -> ""
 fn test_errors() {
     let data = [
         r#"""#, r#""  "#, r#"'"#, r#"' "#, r#"/*"#, r#"/* *"#, r#"/* "#, r#"/* *"#, r#"'\'"#,
-        r#""\"#, r#""\"#,
-        r#""\9"#,
+        r#""\"#, r#""\"#, r#""\9"#,
     ];
 
     for data in data {
@@ -611,3 +727,5 @@ fn test_errors() {
         println!();
     }
 }
+
+
