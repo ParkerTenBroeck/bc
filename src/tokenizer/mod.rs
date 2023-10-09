@@ -3,6 +3,10 @@ use std::{fmt::Write, iter::Peekable, str::Chars};
 use byteyarn::YarnBox;
 use str_buf::StrBuf;
 
+use number::*;
+
+pub mod number;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token<'a> {
     LPar,
@@ -69,8 +73,9 @@ pub enum Token<'a> {
 
     Ident(&'a str),
 
+
     StringLiteral(YarnBox<'a, str>),
-    NumericLiteral(u128, ()),
+    NumericLiteral(Number),
     CharLiteral(char),
 
     SingleLineComment(&'a str),
@@ -248,6 +253,7 @@ impl<'a> Tokenizer<'a> {
                     SSBuilder::Ref(str) => {
                         if str.len() + char.len_utf8() <= 15 {
                             let mut buf = StrBuf::new();
+                            // should never fail
                             buf.write_str(str).unwrap();
                             buf.write_char(char).unwrap();
                             self.str_builder = SSBuilder::Small(buf)
@@ -689,7 +695,7 @@ empty -> ""
 //comment "#;
 
     let tokenizer = Tokenizer::new(data).include_comments();
-
+    
     for token in tokenizer {
         match token {
             Ok(ok) => {
