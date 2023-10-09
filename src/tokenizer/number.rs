@@ -43,28 +43,26 @@ impl<'a> Number<'a> {
             ptr: unsafe { NonNull::new_unchecked(str.as_ptr().cast_mut()) },
             len: str.len().try_into().ok()?,
             ext_back_off: 0,
-            hint: hint,
+            hint,
             _phan: PhantomData,
         })
     }
 
     pub fn new_with_suffix(str: &'a str, num_len: usize, hint: TypeHint) -> Option<Self> {
-        if num_len > str.len() {
-            None
-        } else if num_len == str.len() {
-            Self::new(str, hint)
-        } else {
-            Some(Self {
+        match num_len.cmp(&str.len()) {
+            std::cmp::Ordering::Greater => None,
+            std::cmp::Ordering::Equal => Self::new(str, hint),
+            std::cmp::Ordering::Less => Some(Self {
                 ptr: unsafe { NonNull::new_unchecked(str.as_ptr().cast_mut()) },
                 len: str.len().try_into().ok()?,
                 ext_back_off: (str.len() - num_len).try_into().ok()?,
-                hint: hint,
+                hint,
                 _phan: PhantomData,
-            })
+            }),
         }
     }
 
-    pub fn get_hint(&self) -> TypeHint{
+    pub fn get_hint(&self) -> TypeHint {
         self.hint
     }
 

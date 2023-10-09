@@ -533,10 +533,13 @@ impl<'a> Iterator for Tokenizer<'a> {
                     _ => {
                         consume = false;
                         //TODO remove unwrap
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Int,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Int,
+                            )
+                            .unwrap(),
+                        )));
                     }
                 },
                 State::NumericStartZero => match c {
@@ -557,24 +560,30 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some('_') => {}
                     _ => {
                         consume = false;
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Int,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Int,
+                            )
+                            .unwrap(),
+                        )));
                     }
                 },
                 State::NumericDecimal => match c {
-                    Some('0'..='9') => {},
+                    Some('0'..='9') => {}
                     Some('e') => {
                         self.state = State::NumericDecimalNumberE;
                     }
                     Some('_') => {}
                     _ => {
                         consume = false;
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Float,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Float,
+                            )
+                            .unwrap(),
+                        )));
                     }
                 },
                 State::NumericDecimalNumberE => match c {
@@ -604,29 +613,34 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some('0'..='9' | '_') => {}
                     _ => {
                         consume = false;
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Float,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Float,
+                            )
+                            .unwrap(),
+                        )));
                     }
                 },
-                State::NumericBinStart => match c{
+                State::NumericBinStart => match c {
                     Some('0'..='1') => {
                         self.state = State::NumericBin;
-                    },
+                    }
+                    Some('_') => {}
                     Some(c @ '2'..='9') => {
                         err_ret_state = State::NumericBin;
                         error_meta = Some(TokenMeta::start_end(self.current, processing));
                         update_start_on_error = false;
                         ret = Some(Err(TokenizerError::InvalidBase2Digit(c)))
-                    },
+                    }
                     _ => {
                         consume = false;
                         ret = Some(Err(TokenizerError::NoNumberAfterBasePrefix))
                     }
-                }
+                },
                 State::NumericBin => match c {
                     Some('0'..='1') => {}
+                    Some('_') => {}
                     Some(c @ '2'..='9') => {
                         err_ret_state = State::NumericBin;
                         error_meta = Some(TokenMeta::start_end(self.current, processing));
@@ -635,31 +649,39 @@ impl<'a> Iterator for Tokenizer<'a> {
                     }
                     _ => {
                         consume = false;
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Bin,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Bin,
+                            )
+                            .unwrap(),
+                        )));
                     }
-                }
-                State::NumericHexStart => match c{
+                },
+                State::NumericHexStart => match c {
                     Some('0'..='9' | 'a'..='f' | 'A'..='F') => {
                         self.state = State::NumericHex;
                     }
+                    Some('_') => {}
                     _ => {
                         consume = false;
                         ret = Some(Err(TokenizerError::NoNumberAfterBasePrefix))
                     }
-                }
+                },
                 State::NumericHex => match c {
                     Some('0'..='9' | 'a'..='f' | 'A'..='F') => {}
+                    Some('_') => {}
                     _ => {
                         consume = false;
-                        ret = Some(Ok(Token::NumericLiteral(Number::new(
-                            &self.str[self.numeric_start..self.current.offset],
-                            TypeHint::Hex,
-                        ).unwrap())));
+                        ret = Some(Ok(Token::NumericLiteral(
+                            Number::new(
+                                &self.str[self.numeric_start..self.current.offset],
+                                TypeHint::Hex,
+                            )
+                            .unwrap(),
+                        )));
                     }
-                }
+                },
 
                 State::Eof => return None,
             }
@@ -747,6 +769,11 @@ empty -> ""
 1234567890.1234567890e+1234567890
 1234567890.1234567890e-1234567890
 
+0xFF_FF_FF
+0_0_0_1_2
+0b_1_0_1
+12_45_._43_e_-_1
+
 "#;
 
     let tokenizer = Tokenizer::new(data).include_comments();
@@ -770,9 +797,7 @@ empty -> ""
 fn test_errors() {
     let data = [
         r#"""#, r#""  "#, r#"'"#, r#"' "#, r#"/*"#, r#"/* *"#, r#"/* "#, r#"/* *"#, r#"'\'"#,
-        r#""\"#, r#""\"#, r#""\9"#, 
-        "0b1234", "0x", "0b",
-        "1.0e", "1.0e+", "1.0e-"
+        r#""\"#, r#""\"#, r#""\9"#, "0b1234", "0x", "0b", "1.0e", "1.0e+", "1.0e-",
     ];
 
     for data in data {
