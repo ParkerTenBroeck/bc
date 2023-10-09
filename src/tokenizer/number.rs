@@ -1,25 +1,7 @@
-use std::{ptr::NonNull, num::NonZeroU16, marker::PhantomData};
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Number {
-    Unknown(u128),
-    UnknownFloat(f64),
-    F32(f32),
-    F64(f64),
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-    U128(u128),
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
-    I128(i128),
-}
+use std::{marker::PhantomData, ptr::NonNull};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TypeHint{
+pub enum TypeHint {
     Float,
     Hex,
     Bin,
@@ -27,20 +9,90 @@ enum TypeHint{
 }
 
 #[derive(Clone, Copy)]
-pub struct Number2<'a>{
+pub struct Number<'a> {
     ptr: NonNull<u8>,
-    len: NonZeroU16,
+    len: u16,
     ext_back_off: u8,
     hint: TypeHint,
-    _phan: PhantomData<&'a str>
+    _phan: PhantomData<&'a str>,
 }
 
-impl std::fmt::Debug for Number2<'_>{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Number2").field("ptr", &self.ptr).field("len", &self.len).field("ext_back_off", &self.ext_back_off).field("hint", &self.hint).field("_phan", &self._phan).finish()
+impl PartialEq for Number<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_full() == other.get_full()
     }
 }
 
-fn test(){
-    // std::str::from
+impl Eq for Number<'_> {
+    fn assert_receiver_is_total_eq(&self) {}
+}
+
+impl std::fmt::Debug for Number<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Number")
+            .field("num", &self.get_num())
+            .field("suffix", &self.get_suffix())
+            .field("hint", &self.hint)
+            .finish()
+    }
+}
+
+impl<'a> Number<'a> {
+    pub fn new(str: &'a str, hint: TypeHint) -> Option<Self> {
+        Some(Self {
+            ptr: unsafe { NonNull::new_unchecked(str.as_ptr().cast_mut()) },
+            len: str.len().try_into().ok()?,
+            ext_back_off: 0,
+            hint: hint,
+            _phan: PhantomData,
+        })
+    }
+
+    pub fn new_with_suffix(str: &'a str, num_len: usize, hint: TypeHint) -> Option<Self> {
+        if num_len > str.len() {
+            None
+        } else if num_len == str.len() {
+            Self::new(str, hint)
+        } else {
+            Some(Self {
+                ptr: unsafe { NonNull::new_unchecked(str.as_ptr().cast_mut()) },
+                len: str.len().try_into().ok()?,
+                ext_back_off: (str.len() - num_len).try_into().ok()?,
+                hint: hint,
+                _phan: PhantomData,
+            })
+        }
+    }
+
+    pub fn get_hint(&self) -> TypeHint{
+        self.hint
+    }
+
+    pub fn get_num(&self) -> &'a str {
+        unsafe {
+            let buf = std::slice::from_raw_parts(
+                self.ptr.as_ptr(),
+                self.len as usize - self.ext_back_off as usize,
+            );
+            std::str::from_utf8_unchecked(buf)
+        }
+    }
+
+    pub fn get_suffix(&self) -> Option<&'a str> {
+        if self.ext_back_off == 0 {
+            None
+        } else {
+            unsafe {
+                let buf = std::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+                Some(std::str::from_utf8_unchecked(buf))
+            }
+        }
+    }
+
+    pub fn get_full(&self) -> &'a str {
+        unsafe {
+            let buf = std::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+            std::str::from_utf8_unchecked(buf)
+        }
+    }
 }

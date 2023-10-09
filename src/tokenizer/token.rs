@@ -69,7 +69,7 @@ pub enum Token<'a> {
     Ident(&'a str),
 
     StringLiteral(YarnBox<'a, str>),
-    NumericLiteral(Number),
+    NumericLiteral(Number<'a>),
     CharLiteral(char),
 
     SingleLineComment(&'a str),
@@ -129,4 +129,7 @@ pub enum TokenizerError<'a> {
     InvalidEscape(&'a str),
     UnfinishedEscapeSequence(&'a str),
     UnclosedStringLiteral,
+    EmptyExponent,
+    InvalidBase2Digit(char),
+    NoNumberAfterBasePrefix,
 }
