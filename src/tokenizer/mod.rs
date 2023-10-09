@@ -72,6 +72,7 @@ enum State {
     NumericDecimalNumberEPM,
     NumericBin,
     NumericHex,
+    EscapeSkipWhitespace(EscapeReturn),
 }
 
 pub struct Tokenizer<'a> {
@@ -473,6 +474,24 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some('\\') => self.escape_char_finish('\\', ret_state, &mut char_lit),
                     Some('\'') => self.escape_char_finish('\'', ret_state, &mut char_lit),
                     Some('"') => self.escape_char_finish('"', ret_state, &mut char_lit),
+                    Some('\n') if ret_state == EscapeReturn::String => {
+                        match self.str_builder.take(){
+                            SSBuilder::None => self.str_builder = SSBuilder::Small(str_buf::StrBuf::new()),
+                            SSBuilder::Ref(str) => {
+                                if str.len() <= 15{
+                                    let mut tmp = str_buf::StrBuf::new();
+                                    // this should never fail
+                                    assert_eq!(tmp.push_str(str), str.len());
+                                    self.str_builder = SSBuilder::Small(tmp);
+                                }else{
+                                    self.str_builder = SSBuilder::Alloc(str.into());
+                                }
+                            },
+                            i @ (SSBuilder::Small(_) | 
+                            SSBuilder::Alloc(_)) => self.str_builder = i,
+                        }
+                        self.state = State::EscapeSkipWhitespace(ret_state);
+                    },
                     Some(_) => {
                         update_start_on_error = false;
                         (ret, error_meta, err_ret_state) =
@@ -485,6 +504,16 @@ impl<'a> Iterator for Tokenizer<'a> {
                             self.unfinished_escape_sequence(ret_state, &processing)
                     }
                 },
+                State::EscapeSkipWhitespace(ret_state) => match c{
+                    Some(c) if c.is_whitespace() => {},
+                    _ => {
+                        consume = false;
+                        match ret_state{
+                            EscapeReturn::Char => self.state = State::CharLiteralEnd,
+                            EscapeReturn::String => self.state = State::String,
+                        }
+                    }
+                }
                 State::SingleLine => match c {
                     Some('\n') => {
                         ret = Some(Ok(Token::SingleLineComment(
@@ -773,6 +802,11 @@ empty -> ""
 0_0_0_1_2
 0b_1_0_1
 12_45_._43_e_-_1
+
+"\
+    multi\
+   line\
+   "
 
 "#;
 
