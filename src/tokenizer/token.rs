@@ -66,7 +66,7 @@ pub enum Token<'a> {
     Else,
     While,
     Loop,
-    Let,    
+    Let,
     For,
 
     Ident(&'a str),
@@ -80,15 +80,13 @@ pub enum Token<'a> {
 
     SingleLineComment(&'a str),
     MultiLineComment(&'a str),
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span<T>{
+pub struct Span<T> {
     pub span: TokenMeta,
     pub val: T,
 }
-
 
 impl<T> Span<T> {
     pub fn new(val: T, span: TokenMeta) -> Self {
@@ -128,4 +126,5 @@ pub enum TokenizerError<'a> {
     EmptyExponent,
     InvalidBase2Digit(char),
     NoNumberAfterBasePrefix,
+    NumberParseError(NumberError),
 }

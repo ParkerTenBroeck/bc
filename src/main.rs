@@ -1,6 +1,5 @@
-pub mod tokenizer;
+pub mod bruh;
 pub mod parser;
+pub mod tokenizer;
 
-fn main() {
-    println!("Hello, world!");
-}
+fn main() {}
