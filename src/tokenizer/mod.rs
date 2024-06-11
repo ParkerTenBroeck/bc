@@ -5,6 +5,7 @@ use str_buf::StrBuf;
 pub use number::*;
 pub use token::*;
 
+pub mod adapter;
 pub mod number;
 pub mod token;
 
@@ -119,7 +120,7 @@ fn ident(ident: &str) -> Token {
         "while" => Token::While,
         "loop" => Token::Loop,
         "if" => Token::If,
-        o => Token::Ident(o),
+        o => Token::Ident(o.into()),
     }
 }
 
@@ -551,13 +552,15 @@ impl<'a> Iterator for Tokenizer<'a> {
                 State::SingleLine => match c {
                     Some('\n') => {
                         ret = Some(Ok(Token::SingleLineComment(
-                            &self.str[self.start.offset + 2 * '/'.len_utf8()..self.current.offset],
+                            self.str[self.start.offset + 2 * '/'.len_utf8()..self.current.offset]
+                                .into(),
                         )))
                     }
                     Some(_) => {}
                     None => {
                         ret = Some(Ok(Token::SingleLineComment(
-                            &self.str[self.start.offset + 2 * '/'.len_utf8()..self.current.offset],
+                            self.str[self.start.offset + 2 * '/'.len_utf8()..self.current.offset]
+                                .into(),
                         )))
                     }
                 },
@@ -575,8 +578,9 @@ impl<'a> Iterator for Tokenizer<'a> {
                 State::MultiLineClose1(indent) => match (indent, c) {
                     (0, Some('/')) => {
                         ret = Some(Ok(Token::MultiLineComment(
-                            &self.str[self.start.offset + ('*'.len_utf8() + '/'.len_utf8())
-                                ..processing.offset - ('*'.len_utf8() + '/'.len_utf8())],
+                            self.str[self.start.offset + ('*'.len_utf8() + '/'.len_utf8())
+                                ..processing.offset - ('*'.len_utf8() + '/'.len_utf8())]
+                                .into(),
                         )))
                     }
                     (indent, Some('/')) => self.state = State::MultiLine(indent - 1),

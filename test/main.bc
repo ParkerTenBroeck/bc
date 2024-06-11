@@ -1,0 +1,55 @@
+//const i32 VALUE = 23;
+//static isize FUNNY = -55;
+const i32 VALUE = 23;
+static isize FUNNY;
+static isize FUNNY1 = false;
+static isize FUNNY2 = "hello~";
+static isize FUNNY3 = 'character?';
+static isize FUNNY4 = 12.33e-43;
+
+struct Name{
+    usize this,
+    &str a,
+    *i32 type,
+}
+
+struct Thing{
+    Name subType,
+    &Other woah,
+    u32 stuff,
+}
+
+struct Other{
+    u32 test,
+    Thing lol,
+}
+
+union Fancy{
+    [i32] funny,
+    Name type,
+}
+
+enum Woah{
+    One,
+    Two,
+    Three,
+    Four,
+    // no tagged unions for you :3
+}
+
+fn main(i32 count, [&str] str){
+    while (count > 0) {
+        write(1, str[count], strlen(str[count]) - 1 );
+        count = count - 1;
+        let v = 5 * * ({break &12; }) + 2;
+        count.test(12);
+    }
+}
+
+extern "C" fn strlen(*u8 str) usize;
+extern "C" fn write(i32 fd, *u8 data, usize len) isize;
+
+extern "C" fn func() std::types::void {
+    /* extern c function we define */
+}
+

@@ -1,0 +1,238 @@
+use crate::parser::*;
+use crate::stage::Context;
+
+grammar();
+
+match {
+    _
+}else{
+    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
+    r"//[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
+    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip `/* comments */`
+}
+
+
+pub Module: ast::Module = {
+    <d: TopLevelDef> => ast::Module::single(d),
+    <mut m: Module> <d: TopLevelDef> => {
+        m.append(d);
+        m
+    },
+};
+
+TopLevelDef: ast::TopLevelDef = {
+    FunctionDef => ast::TopLevelDef::FunctionDef(<>),
+    FunctionHeader => ast::TopLevelDef::FunctionHeader(<>),
+    GlobalDef => ast::TopLevelDef::GlobalDef(<>),
+    StructDef => ast::TopLevelDef::StructDef(<>),
+    UnionDef => ast::TopLevelDef::UnionDef(<>),
+    EnumDef => ast::TopLevelDef::EnumDef(<>),
+
+};
+
+StructDef: ast::StructDef = {
+    "struct" <n: ident> "{" <v: Comma<NammedTypeDecl>> "}" => ast::StructDef{
+        name: n,
+        values: v,
+    },
+}
+
+UnionDef: ast::UnionDef = {
+    "union" <n: ident> "{" <v: Comma<NammedTypeDecl>> "}" => ast::UnionDef{
+        name: n,
+        values: v,
+    },
+}
+
+EnumDef: ast::EnumDef = {
+    "enum" <n: ident> "{" <v: Comma<ident>> "}" => ast::EnumDef{
+        name: n,
+        values: v,
+    },
+}
+
+GlobalDef: ast::GlobalDef = {
+    "static" <t: Type> <n: ident> <v: ("=" <Expression>)?> ";" => ast::GlobalDef{
+        kind: ast::GlobalKind::Static,
+        ty: t,
+        name: n,
+        value: v
+    },
+    "const" <t: Type> <n: ident> "=" <v: Expression> ";" => ast::GlobalDef{
+        kind: ast::GlobalKind::Const,
+        ty: t,
+        name: n,
+        value: Some(v)
+    },
+}
+
+FunctionDef: ast::FunctionDef = {
+    <k: ("extern" <string>)?> "fn" <name: ident> "(" <p: Comma<NammedTypeDecl>> ")" <r: Type?> "{" <b: Statement*> "}" => ast::FunctionDef{
+        name: name,
+        kind: k,
+        params: p,
+        ret: r,
+        body: b
+    }
+};
+
+FunctionHeader: ast::FunctionHeader = {
+    "extern" <k: string?> "fn" <name: ident> "(" <p: Comma<NammedTypeDecl>> ")" <r: Type?> ";" => ast::FunctionHeader{
+        name: name,
+        kind: k,
+        params: p,
+        ret: r,
+    }
+};
+
+
+Statement: ast::Statement = {
+    <t: Type> <i: ident> "=" <e: Expression> ";" => ast::Statement::VariableDeclaration(t, i, e),
+    <v: ExpressionWithoutBlock> ";" => ast::Statement::Expression(v),
+    <v: BlockExpression> => ast::Statement::Expression(v),
+}
+
+Expression: ast::Expression = {
+    <e: BlockExpression> => e,
+    <e: ExpressionWithoutBlock> => e,
+}
+
+BlockExpression: ast::Expression = {
+    <l:  label?> "if" "(" <c: Expression> ")" "{" <s: Statement*> "}" <ei: ("else" "if" "(" <Expression> ")" "{" <Statement*> "}")*> <e: ("else" "{" <Statement*> "}")?> => {
+        ast::Expression::Block(ast::Block::If(l, c.into(), s, ei, e))
+    },
+    <l:  label?> "while" "("<c: Expression>")" "{" <s: Statement*> "}" =>  {
+        ast::Expression::Block(ast::Block::While(l, c.into(), s))
+    },
+    <l:  label?> "{" <s: Statement*> "}" => {
+        ast::Expression::Block(ast::Block::Scope(l, s))
+    },
+}
+
+ExpressionWithoutBlock: ast::Expression = {
+    #[precedence(level="20")]
+    "break" <l:  label?> <v: ExpressionWithoutBlock?> => ast::Expression::Break(l, v.map(Box::new)),
+    "continue" <l:  label?> => ast::Expression::Continue(l),
+    "return" <v: ExpressionWithoutBlock?> => ast::Expression::Return(v.map(Box::new)),
+
+    #[precedence(level="19")] #[assoc(side="right")]
+    <l: ExpressionWithoutBlock> "=" <r: ExpressionWithoutBlock> => ast::Expression::Assign(l.into(), r.into()),
+
+    #[precedence(level="18")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "||" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::LogicalOr, r.into()),
+    #[precedence(level="17")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "&&" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::LogicalAnd, r.into()),
+    #[precedence(level="16")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "==" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Eq, r.into()),
+    <l: ExpressionWithoutBlock> "!=" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Neq, r.into()),
+    <l: ExpressionWithoutBlock> ">" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Gt, r.into()),
+    <l: ExpressionWithoutBlock> "<" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Lt, r.into()),
+    <l: ExpressionWithoutBlock> ">=" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Gteq, r.into()),
+    <l: ExpressionWithoutBlock> "<=" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Lteq, r.into()),
+    #[precedence(level="15")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "|" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::BitOr, r.into()),
+    #[precedence(level="14")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "^" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::BitXor, r.into()),
+    #[precedence(level="13")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "&" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::BitAnd, r.into()),
+    #[precedence(level="12")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "<<" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::ShiftLeft, r.into()),
+    <l: ExpressionWithoutBlock> ">>" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::ShiftRight, r.into()),
+    #[precedence(level="11")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "+" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Plus, r.into()),
+    <l: ExpressionWithoutBlock> "-" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Minus, r.into()),
+    #[precedence(level="10")] #[assoc(side="left")]
+    <l: ExpressionWithoutBlock> "*" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Times, r.into()),
+    <l: ExpressionWithoutBlock> "/" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Divide, r.into()),
+    <l: ExpressionWithoutBlock> "%" <r: ExpressionWithoutBlock> => ast::Expression::BinaryOp(l.into(), ast::BinOpKind::Modulo, r.into()),
+    #[precedence(level="9")]
+    "-" <r: ExpressionWithoutBlock> => ast::Expression::UnaryOp(ast::UnaryOpKind::Negate, r.into()),
+    "*" <r: ExpressionWithoutBlock> => ast::Expression::UnaryOp(ast::UnaryOpKind::Deref, r.into()),
+    "&" <r: ExpressionWithoutBlock> => ast::Expression::UnaryOp(ast::UnaryOpKind::Ref, r.into()),
+    "!" <r: ExpressionWithoutBlock> => ast::Expression::UnaryOp(ast::UnaryOpKind::Not, r.into()),
+    #[precedence(level="8")]
+    <l: ExpressionWithoutBlock> "(" <a: Comma<Expression>> ")" => {
+        match l{
+            ast::Expression::FieldAccess(l, r) => {
+                ast::Expression::MemberFunction(l, r, a)
+            }
+            _ => {
+                ast::Expression::FunctionCall(l.into(), a)
+            }
+        }
+    },
+    <l: ExpressionWithoutBlock> "[" <r: ExpressionWithoutBlock> "]" => ast::Expression::ArrayAccess(l.into(), r.into()),
+    #[precedence(level="7")]
+    <l: ExpressionWithoutBlock> "." <r: ident> => {
+        ast::Expression::FieldAccess(l.into(), r)
+    },
+
+    #[precedence(level="6")]
+    <p: Path> "{" <i: Comma<(<ident> "=" <Expression>)>> "}" => todo!("nya"),
+
+    #[precedence(level="0")]
+    "size_of" "(" <t: Type> ")" => ast::Expression::SizeOf(t),
+    "align_of" "(" <t: Type> ")" => ast::Expression::AlignOf(t),
+    "offset_of" "(" <t: Type> "," <i: ident> ")" => ast::Expression::OffsetOf(t, i),
+    "type_name" "(" <t: Type> ")" => ast::Expression::TypeName(t),
+    <p: Path> => ast::Expression::Path(p),
+    <l: Literal> => ast::Expression::Literal(l),
+    "(" <c: Expression> ")" => c,
+
+}
+
+
+Comma<T>: Vec<T> = { 
+    <mut v:(<T> ",")*> <e:T?> => match e { 
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+NammedTypeDecl: (ast::Type, String) = {
+    <t: Type> <n: ident> => (t, n)
+}
+
+Path: ast::Path = {
+    <i: ident> => {
+        let mut path = ast::Path::new();
+        path.push(&i);
+        path
+    },
+    <mut p: Path> "::" <i: ident> => {
+        p.push(&i);
+        p
+    }
+}
+
+Type: ast::Type = {
+    <p: Path> => ast::Type::new(p),
+    "[" <t: Type> "]" => t.wrap_array(),
+    "[" <t: Type> ";" <e: Expression> "]" => t.wrap_array_sized(e),
+    "*" <t: Type> => t.wrap_ptr(),
+    "&" <t: Type> => t.wrap_ref(),
+    "fn" "(" <p: Comma<Type>> ")" <r: Type> => ast::Type::new_fn(p, Some(r))
+};
+
+Literal: ast::Literal = {
+    <s: string> => ast::Literal::String(s),
+    <c: char> => ast::Literal::Char(c),
+    <b: boolean> => ast::Literal::Boolean(b),
+    <n: number> => ast::Literal::Number(n),
+};
+
+label:  String = <v: r"'[a-zA-Z_][a-zA-Z_0-9]*"> => v.into();
+
+ident: String = <v: r"[a-zA-Z_][a-zA-Z_0-9]*"> => v.into();
+
+string: String = <s: r#""((\\")|[^"])*""#> => s[1..s.len()-1].into();
+char: String = <s: r#"'((\\')|[^'])*'"#> => s[1..s.len()-1].into();
+boolean: bool = {
+    "true" => true,
+    "false" => false,
+};
+
+number: String = <n: r#"((0b[01_]+)|(0x[0-9a-fA-F_]+)|([0-9][0-9_]*)([a-z][0-9]+)?)|((([0-9][0-9_]*)?(\.[0-9_]+)(e[+-]?[0-9_]+)?)([a-z][0-9]+)?)"#> => n.into();

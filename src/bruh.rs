@@ -1,3 +1,12 @@
+use std::{
+    collections::VecDeque,
+    default,
+    marker::PhantomData,
+    mem::{discriminant, Discriminant},
+};
+
+use lalrpop_util::lalrpop_mod;
+
 #[derive(Clone, Copy, Debug)]
 enum State {
     Default,
@@ -221,5 +230,182 @@ fn test() {
     assert!(!Grammar::new("Length: 3[ 1,2]").matches());
 }
 
-#[allow(unused)]
-fn test2(val: &mut i32) {}
+#[derive(Debug)]
+pub enum BasicOperator {
+    Times,
+    Div,
+    Add,
+    Minus,
+
+    Eq,
+    Gt,
+    Lt,
+
+    Or,
+    And,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum BasicValue {
+    Numeric(f64),
+    Boolean(bool),
+}
+
+pub trait Operator<V> {
+    fn output(&self) -> &[Discriminant<V>];
+    fn input(&self) -> &[Discriminant<V>];
+    fn run(&self, output: &mut Vec<V>);
+}
+
+impl Operator<BasicValue> for BasicOperator {
+    fn run(&self, output: &mut Vec<BasicValue>) {
+        let right = output.pop().unwrap();
+        let left = output.pop().unwrap();
+        let out = match (left, self, right) {
+            (BasicValue::Numeric(left), BasicOperator::Times, BasicValue::Numeric(right)) => {
+                BasicValue::Numeric(left * right)
+            }
+            (BasicValue::Numeric(left), BasicOperator::Div, BasicValue::Numeric(right)) => {
+                BasicValue::Numeric(left / right)
+            }
+            (BasicValue::Numeric(left), BasicOperator::Add, BasicValue::Numeric(right)) => {
+                BasicValue::Numeric(left + right)
+            }
+            (BasicValue::Numeric(left), BasicOperator::Minus, BasicValue::Numeric(right)) => {
+                BasicValue::Numeric(left - right)
+            }
+
+            (BasicValue::Numeric(left), BasicOperator::Eq, BasicValue::Numeric(right)) => {
+                BasicValue::Boolean(left == right)
+            }
+            (BasicValue::Numeric(left), BasicOperator::Gt, BasicValue::Numeric(right)) => {
+                BasicValue::Boolean(left > right)
+            }
+            (BasicValue::Numeric(left), BasicOperator::Lt, BasicValue::Numeric(right)) => {
+                BasicValue::Boolean(left < right)
+            }
+
+            (BasicValue::Boolean(left), BasicOperator::Or, BasicValue::Boolean(right)) => {
+                BasicValue::Boolean(left || right)
+            }
+            (BasicValue::Boolean(left), BasicOperator::And, BasicValue::Boolean(right)) => {
+                BasicValue::Boolean(left && right)
+            }
+            _ => todo!(),
+        };
+        output.push(out);
+    }
+
+    fn output(&self) -> &'static [Discriminant<BasicValue>] {
+        match self {
+            BasicOperator::Times
+            | BasicOperator::Div
+            | BasicOperator::Add
+            | BasicOperator::Minus => {
+                const V: [Discriminant<BasicValue>; 1] = [discriminant(&BasicValue::Numeric(0.0))];
+                &V
+            }
+            BasicOperator::Eq
+            | BasicOperator::Gt
+            | BasicOperator::Lt
+            | BasicOperator::And
+            | BasicOperator::Or => {
+                const V: [Discriminant<BasicValue>; 1] =
+                    [discriminant(&BasicValue::Boolean(false))];
+                &V
+            }
+        }
+    }
+
+    fn input(&self) -> &'static [Discriminant<BasicValue>] {
+        match self {
+            BasicOperator::Times
+            | BasicOperator::Div
+            | BasicOperator::Add
+            | BasicOperator::Minus
+            | BasicOperator::Eq
+            | BasicOperator::Gt
+            | BasicOperator::Lt => {
+                const V: [Discriminant<BasicValue>; 2] = [
+                    discriminant(&BasicValue::Numeric(0.0)),
+                    discriminant(&BasicValue::Numeric(0.0)),
+                ];
+                &V
+            }
+            BasicOperator::And | BasicOperator::Or => {
+                const V: [Discriminant<BasicValue>; 2] = [
+                    discriminant(&BasicValue::Boolean(false)),
+                    discriminant(&BasicValue::Boolean(false)),
+                ];
+                &V
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum MachineOperation<V, O> {
+    Lit(Discriminant<V>),
+    Op(O),
+}
+
+#[derive(Default, Debug)]
+struct Run<V, O: Operator<V>> {
+    pub values: VecDeque<V>,
+    stack: Vec<V>,
+    pub operator: Vec<MachineOperation<V, O>>,
+}
+
+impl<V, O: Operator<V>> Run<V, O> {
+    pub fn new() -> Self {
+        Self {
+            operator: Default::default(),
+            stack: Default::default(),
+            values: Default::default(),
+        }
+    }
+
+    pub fn run(&mut self) {
+        for op in self.operator.iter() {
+            match op {
+                MachineOperation::Lit(dis) => {
+                    let val = self.values.pop_front().unwrap();
+                    //debug type check
+                    debug_assert_eq!(discriminant(&val), *dis);
+                    self.stack.push(val);
+                }
+                MachineOperation::Op(op) => {
+                    op.run(&mut self.stack);
+                    //debug type check
+                    debug_assert!({
+                        let mut val = true;
+                        for (got, expec) in self.stack.iter().rev().zip(op.output().iter()) {
+                            if discriminant(got) != *expec {
+                                val = false;
+                                break;
+                            }
+                        }
+                        val
+                    });
+                }
+            }
+        }
+    }
+}
+
+lalrpop_mod!(calc);
+
+#[test]
+#[allow(enum_intrinsics_non_enums)]
+fn test4() {
+    println!("{:?}", discriminant(&12f32));
+    let input = "(2+3*4) > 15";
+    let mut context = Run::new();
+    calc::FinishedParser::new()
+        .parse(&mut context, input)
+        .unwrap();
+    println!("{:#?}", context);
+    context.run();
+    println!("{:#?}", context);
+    println!("{:#?}", context.stack.pop());
+}

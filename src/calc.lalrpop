@@ -1,0 +1,53 @@
+use crate::bruh::*;
+use lalrpop_util::ParseError;
+use std::mem::{discriminant, Discriminant};
+
+
+grammar(context: &mut Run<BasicValue, BasicOperator>);
+
+pub Finished: () = {
+    <Expr>
+}
+
+Expr: () = {
+    #[precedence(level="0")] // Highest precedence
+    Term,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Times)),
+    <l:Expr> "/" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Div)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Add)),
+    <l:Expr> "-" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Minus)),
+    #[precedence(level="3")] #[assoc(side="none")]
+    <l:Expr> "==" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Eq)),
+    <l:Expr> ">" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Gt)),
+    <l:Expr> "<" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Lt)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "&&" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::And)),
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expr> "||" <r:Expr> => context.operator.push(MachineOperation::Op(BasicOperator::Or)),
+};
+
+Term: () = {
+    r"([0-9][0-9_]*)?(((\.[0-9_]+)(e[+-]?[0-9_]+)?)([a-z][0-9]+)?)?" =>? {
+        use std::str::FromStr;
+        let num = f64::from_str(<>).map_err(|_|ParseError::User{
+            error: "Invalid Number"
+        })?;
+        let num = BasicValue::Numeric(num);
+        context.operator.push(MachineOperation::Lit(discriminant(&num)));
+        context.values.push_back(num);
+        Ok(())
+    },
+    "true" => {
+        let num = BasicValue::Boolean(true);
+        context.operator.push(MachineOperation::Lit(discriminant(&num)));
+        context.values.push_back(num);
+    },
+    "false" => {
+        let num = BasicValue::Boolean(false);
+        context.operator.push(MachineOperation::Lit(discriminant(&num)));
+        context.values.push_back(num);
+    },
+    "(" <Expr> ")" => {}
+}

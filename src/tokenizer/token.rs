@@ -69,6 +69,12 @@ pub enum Token<'a> {
     Let,
     For,
 
+    Struct,
+    Enum,
+    Union,
+    Break,
+
+    Label(&'a str),
     Ident(&'a str),
 
     StringLiteral(YarnBox<'a, str>),

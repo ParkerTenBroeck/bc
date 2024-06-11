@@ -1,70 +1,82 @@
-use crate::tokenizer::{Span, Token, Tokenizer, TokenizerError};
+use lalrpop_util::lalrpop_mod;
+
+// use crate::tokenizer::{Span, Token, Tokenizer, TokenizerError};
 
 pub mod ast;
 
-struct TokenizerIdk<'a> {
-    tokenizer: Tokenizer<'a>,
-    errors: Vec<Span<TokenizerError<'a>>>,
-}
+lalrpop_mod!(pub def, "/parser/def.rs");
 
-impl<'a> TokenizerIdk<'a> {
-    pub fn new(tokenizer: Tokenizer<'a>) -> Self {
-        Self {
-            tokenizer,
-            errors: Default::default(),
-        }
-    }
-}
+// struct TokenizerIdk<'a> {
+//     tokenizer: Tokenizer<'a>,
+//     errors: Vec<Span<TokenizerError<'a>>>,
+// }
 
-impl<'a> Iterator for TokenizerIdk<'a> {
-    type Item = Span<Token<'a>>;
+// impl<'a> TokenizerIdk<'a> {
+//     pub fn new(tokenizer: Tokenizer<'a>) -> Self {
+//         Self {
+//             tokenizer,
+//             errors: Default::default(),
+//         }
+//     }
+// }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.tokenizer.next()? {
-                Ok(ok) => return Some(ok),
-                Err(err) => self.errors.push(*err),
-            }
-        }
-    }
-}
+// impl<'a> Iterator for TokenizerIdk<'a> {
+//     type Item = Span<Token<'a>>;
 
-struct Parser<'a> {
-    tokenizer: TokenizerIdk<'a>,
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         loop {
+//             match self.tokenizer.next()? {
+//                 Ok(ok) => return Some(ok),
+//                 Err(err) => self.errors.push(*err),
+//             }
+//         }
+//     }
+// }
 
-impl<'a> Parser<'a> {
-    pub fn new(data: &'a str) -> Self {
-        Self {
-            tokenizer: TokenizerIdk::new(Tokenizer::new(data)),
-        }
-    }
+// struct Parser<'a> {
+//     tokenizer: TokenizerIdk<'a>,
+// }
 
-    pub fn parse(&mut self) -> Result<ast::TokenTree<'a>, ()> {
-        todo!()
-    }
-}
+// impl<'a> Parser<'a> {
+//     pub fn new(data: &'a str) -> Self {
+//         Self {
+//             tokenizer: TokenizerIdk::new(Tokenizer::new(data)),
+//         }
+//     }
 
-#[test]
-fn test() {
-    let program = r#"\
-        fn test(val: u32, val2: bool){
-            let test: u32 = val;
-            println(test);
-            println(val2);
-        }
+//     pub fn parse(&mut self) -> Result<ast::TokenTree<'a>, ()> {
+//         todo!()
+//     }
+// }
 
-        fn main(){
-            test(12, false);
-        }
-    "#;
-    let mut parser = Parser::new(program);
-    match parser.parse() {
-        Ok(o) => {
-            println!("{:#?}", o)
-        }
-        Err(_err) => {
-            todo!()
-        }
-    }
-}
+// #[test]
+// fn test() {
+//     let program = r#"\
+//         fn test(val: u32, val2: bool){
+//             let test: u32 = val;
+//             println(test);
+//             println(val2);
+//         }
+
+//         fn main(){
+//             test(12, false);
+//         }
+//     "#;
+//     let mut parser = Parser::new(program);
+//     match parser.parse() {
+//         Ok(o) => {
+//             println!("{:#?}", o)
+//         }
+//         Err(_err) => {
+//             todo!()
+//         }
+//     }
+// }
+
+// #[test]
+// fn test() {
+//     let parser = def::ModuleParser::new();
+//     let str = include_str!("../../test/main.bc");
+//     let res = parser.parse(str);
+//     println!("{:#?}", res);
+// }

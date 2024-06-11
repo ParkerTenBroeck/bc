@@ -1,0 +1,43 @@
+use crate::bruh2::*;
+use lalrpop_util::ParseError;
+use std::mem::{discriminant, Discriminant};
+
+
+grammar(context: &mut Run<BasicOperator>);
+
+pub Finished: () = {
+    <Expr>
+}
+
+Expr: () = {
+    #[precedence(level="0")]
+    Term,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => context.add_operator(BasicOperator::Times),
+    <l:Expr> "/" <r:Expr> => context.add_operator(BasicOperator::Div),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => context.add_operator(BasicOperator::Add),
+    <l:Expr> "-" <r:Expr> => context.add_operator(BasicOperator::Minus),
+    #[precedence(level="3")] #[assoc(side="none")]
+    <l:Expr> "==" <r:Expr> => context.add_operator(BasicOperator::Eq),
+    <l:Expr> ">" <r:Expr> => context.add_operator(BasicOperator::Gt),
+    <l:Expr> "<" <r:Expr> => context.add_operator(BasicOperator::Lt),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "&&" <r:Expr> => context.add_operator(BasicOperator::And),
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expr> "||" <r:Expr> => context.add_operator(BasicOperator::Or),
+};
+
+Term: () = {
+    r"([0-9][0-9_]*)?(((\.[0-9_]+)(e[+-]?[0-9_]+)?)([a-z][0-9]+)?)?" =>? {
+        use std::str::FromStr;
+        let num = f64::from_str(<>).map_err(|_|ParseError::User{
+            error: "Invalid Number"
+        })?;
+        context.push_val(num);
+        Ok(())
+    },
+    "true" => context.push_val(true),
+    "false" => context.push_val(false),
+    "(" <Expr> ")" => {}
+}
